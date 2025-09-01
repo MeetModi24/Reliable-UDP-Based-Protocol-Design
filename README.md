@@ -1,0 +1,2 @@
+This project implements reliable data transfer over an unreliable communication channel with a window-based flow control approach   
+`CS39006_Assignment_5_2024_Final.pdf` contains the project motivation and description along with implementation of each file

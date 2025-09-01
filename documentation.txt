@@ -1,0 +1,103 @@
+
+            P                   |               Avg number of transmissions
+--------------------------------------------------------------------------------------
+            0.05                |                       1.76
+            0.1                 |                       2.12    
+            0.15                |                       2.54
+            0.2                 |                       2.9
+            0.25                |                       3.2
+            0.3                 |                       3.51
+            0.35                |                       3.84
+            0.4                 |                       4.02
+            0.45                |                       4.65
+            0.5                 |                       4.9
+
+In msocket.h:
+1. SOCKINFO:
+    - Used by user and initmsocket to create and bind a socket
+2. swnd:
+    - send_window_size: current send window size
+    - unack_time: stores the time msg is unacked in send buffer
+    - length: Length of the message in send buffer
+    - validmssg: Set to 1 if valid message is there in the buffer
+    - rem_buff_space: Remaining buffer space
+    - start_index: Start index of the buffer
+    - last_sent_index: Last sent index of the buffer
+    - end_index: End index of the buffer
+    - start_index_ack_no: Ack no of the start index
+    - last_sent_index_ack_no: Ack no of the last sent index
+
+3. rwnd:
+    - receive_window_size: current receive window size
+    - last_inorder_msg: last in order message received
+    - last_inorder_msg_seq_num: sequence number of the last in-order message
+    - recv_msg[RECV_BUFFER_SIZE]: received messages
+    - msg_size[RECV_BUFFER_SIZE]: size of the received messages
+    - start_index: start index in the receive buffer to send to user
+    - start_seq_num: sequence number of the start index
+    - nospace: set if receive_window_size becomes 0
+
+4. shared_memory:
+    - free: set to 1 if shared memory is free
+    - pid: pid of the process using the shared memory
+    - sockfd: socket file descriptor
+    - sockaddr_in addr: dest address of the socket
+    - send_buffer[SEND_BUFFER_SIZE][1000]: send buffer
+    - recv_buffer[RECV_BUFFER_SIZE][1000]: receive buffer
+    - swnd: send window struct
+    - rwnd: receive window struct
+
+In msocket.c:
+1. m_socket(int domain, int type, int protocol):
+    - User calls this to set the sockfd with help of initmsocket
+
+2. m_bind(int m_sockfd, const struct sockaddr *src_addr, socklen_t src_addrlen, const struct sockaddr *dest_addr, socklen_t dest_addrlen):
+    - User calls this to bind the socket
+    - Inimsokcet is used here
+    - Initialises entries in the shared memory
+
+3. m_sendto(int m_sockfd, const void *message, size_t length, int flags, const struct sockaddr *dest_addr, socklen_t dest_addrlen):
+    - Do error checking and then enter the message in Send buffer
+    - Do necessary increment of shared memory variables
+    - Sender thread uses this send buffer to send the messages
+
+4. m_recvfrom(int m_sockfd, void *restrict buffer, size_t length, int flags, struct sockaddr *restrict address, socklen_t *restrict address_len):
+    -  Do error checking and then send the messages in the receiv buffer back to user
+
+5. m_close(int m_sockfd):
+    - Sets the SM entry to be free if there is no message left to send(in case of sender
+    - Send EBUSY error otherwise and exits
+    - Garbage collector later on frees the extries on finish
+
+6. dropMessage(float probability):
+    - Drops the message with given probability
+    - Sends 1 in this case
+    - 0 otherwise
+
+In initmsocket.c:
+1. update_Receive_Window_Size(int i, struct shared_memory *SM):
+    - Updates the receive window size
+    - Uses various conditions according to the buffer implementation
+
+2. update_Receiver_Last_Inorder_Msg(int i, struct shared_memory *SM):
+    - Updates the last in order message received
+    - Uses various conditions according to the buffer implementation
+
+3. R(void* params):
+    - Receiver thread
+    - Uses select call to wait on readfds
+    - In case of timeout, updates readfd and resends timedout messages
+    - In case of message received, updates the receive buffer and sends the message to user
+    - Uses dropMessage feature
+    - Updates the receive window size and last in order message received
+    - Handles inorder and outorder message function
+
+4. S(void* params):
+    - Sender Thread
+    - Resends unacked messages on timeout
+    - Sends messages in sender buffer 
+
+5. G(void* params):
+    - Garbage collector thread
+    - Frees the shared memory entries if all messages are sent
+
